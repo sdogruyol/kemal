@@ -1,4 +1,4 @@
-require "./spec_helper"
+require "./dsl_helper"
 
 describe "ParamParser" do
   it "parses query params" do
@@ -22,19 +22,19 @@ describe "ParamParser" do
   end
 
   it "parses url params" do
-    kemal = Kemal::RouteHandler::INSTANCE
-    kemal.add_route "POST", "/hello/:hasan" do |env|
+    route_handler = Kemal.application.route_handler
+    route_handler.add_route "POST", "/hello/:hasan" do |env|
       "hello #{env.params.url["hasan"]}"
     end
     request = HTTP::Request.new("POST", "/hello/cemal")
     # Radix tree MUST be run to parse url params.
-    context = create_request_and_return_io_and_context(kemal, request)[1]
-    url_params = Kemal::ParamParser.new(request, context.route_lookup.params).url
+    io_with_context = create_request_and_return_io(route_handler, request)
+    url_params = Kemal::ParamParser.new(request).url
     url_params["hasan"].should eq "cemal"
   end
 
   it "decodes url params" do
-    kemal = Kemal::RouteHandler::INSTANCE
+    kemal = Kemal.application.route_handler
     kemal.add_route "POST", "/hello/:email/:money/:spanish" do |env|
       email = env.params.url["email"]
       money = env.params.url["money"]
@@ -43,8 +43,8 @@ describe "ParamParser" do
     end
     request = HTTP::Request.new("POST", "/hello/sam%2Bspec%40gmail.com/%2419.99/a%C3%B1o")
     # Radix tree MUST be run to parse url params.
-    context = create_request_and_return_io_and_context(kemal, request)[1]
-    url_params = Kemal::ParamParser.new(request, context.route_lookup.params).url
+    io_with_context = create_request_and_return_io(kemal, request)
+    url_params = Kemal::ParamParser.new(request).url
     url_params["email"].should eq "sam+spec@gmail.com"
     url_params["money"].should eq "$19.99"
     url_params["spanish"].should eq "año"

@@ -8,7 +8,9 @@ module Kemal
     CACHED_ROUTES_LIMIT = 1024
     property routes, cached_routes
 
-    def initialize
+    getter app : Kemal::Base
+
+    def initialize(@app)
       @routes = Radix::Tree(Route).new
       @cached_routes = Hash(String, Radix::Result(Route)).new
     end
@@ -42,12 +44,23 @@ module Kemal
       route
     end
 
+    def lookup_route(request)
+      lookup_route request.override_method.as(String), request.path
+    end
+
+    def route_defined?(request)
+      lookup_route(request).found?
+    end
+
     # Processes the route if it's a match. Otherwise renders 404.
     private def process_request(context)
-      raise Kemal::Exceptions::RouteNotFound.new(context) unless context.route_found?
-      content = context.route.handler.call(context)
+      raise Kemal::Exceptions::RouteNotFound.new(context) unless route_defined?(context.request)
 
-      if !Kemal.config.error_handlers.empty? && Kemal.config.error_handlers.has_key?(context.response.status_code)
+      tree_result = lookup_route(context.request)
+      context.request.url_params = tree_result.params
+      content = tree_result.payload.handler.call(context)
+
+      if !app.error_handlers.empty? && app.error_handlers.has_key?(context.response.status_code)
         raise Kemal::Exceptions::CustomException.new(context)
       end
 
@@ -62,6 +75,11 @@ module Kemal
     private def add_to_radix_tree(method, path, route)
       node = radix_path method, path
       @routes.add node, route
+    end
+
+    def clear
+      @routes = Radix::Tree(Route).new
+      @cached_routes = Hash(String, Radix::Result(Route)).new
     end
   end
 end

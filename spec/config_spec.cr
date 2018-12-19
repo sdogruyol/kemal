@@ -1,16 +1,25 @@
 require "./spec_helper"
 
+private class CustomTestHandler < Kemal::Handler
+  def call(env)
+    env.response << "Kemal"
+    call_next env
+  end
+end
+
 describe "Config" do
   it "sets default port to 3000" do
-    Kemal::Config.new.port.should eq 3000
+    config = Kemal::Config.new
+    config.port.should eq 3000
   end
 
   it "sets default environment to development" do
-    Kemal::Config.new.env.should eq "development"
+    config = Kemal::Config.new
+    config.env.should eq "development"
   end
 
   it "sets environment to production" do
-    config = Kemal.config
+    config = Kemal::Config.new
     config.env = "production"
     config.env.should eq "production"
   end
@@ -20,28 +29,35 @@ describe "Config" do
   end
 
   it "sets host binding" do
-    config = Kemal.config
+    config = Kemal::Config.new
     config.host_binding = "127.0.0.1"
     config.host_binding.should eq "127.0.0.1"
   end
 
-  it "adds a custom handler" do
-    config = Kemal.config
-    config.add_handler CustomTestHandler.new
-    Kemal.config.setup
-    config.handlers.size.should eq(7)
+  it "adds a custom handler to Base" do
+    application = Kemal::Base.new
+    application.add_handler CustomTestHandler.new
+    application.setup
+    application.handlers.size.should eq 6
+  end
+
+  it "adds a custom handler to Application" do
+    application = Kemal::Application.new
+    application.add_handler CustomTestHandler.new
+    application.setup
+    application.handlers.size.should eq 8
   end
 
   it "toggles the shutdown message" do
-    config = Kemal.config
+    config = Kemal::Config.new
     config.shutdown_message = false
-    config.shutdown_message.should eq false
+    config.shutdown_message?.should be_false
     config.shutdown_message = true
-    config.shutdown_message.should eq true
+    config.shutdown_message?.should be_true
   end
 
   it "adds custom options" do
-    config = Kemal.config
+    config = Kemal::Config.new
     ARGV.push("--test")
     ARGV.push("FOOBAR")
     test_option = nil
@@ -51,7 +67,8 @@ describe "Config" do
         test_option = opt
       end
     end
-    Kemal::CLI.new ARGV
+
+    Kemal::CLI.new(ARGV, config)
     test_option.should eq("FOOBAR")
   end
 

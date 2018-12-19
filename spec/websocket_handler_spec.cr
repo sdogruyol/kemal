@@ -1,10 +1,23 @@
 require "./spec_helper"
 
+private def create_ws_request_and_return_io(handler, request)
+  io = IO::Memory.new
+  response = HTTP::Server::Response.new(io)
+  context = HTTP::Server::Context.new(request, response)
+  begin
+    handler.call context
+  rescue IO::Error
+    # Raises because the IO::Memory is empty
+  end
+  io
+end
+
 describe "Kemal::WebSocketHandler" do
   it "doesn't match on wrong route" do
-    handler = Kemal::WebSocketHandler::INSTANCE
-    handler.next = Kemal::RouteHandler::INSTANCE
-    ws "/" { }
+    app = Kemal::Base.new
+    handler = app.websocket_handler
+    handler.next = app.route_handler
+    app.ws "/" { }
     headers = HTTP::Headers{
       "Upgrade"           => "websocket",
       "Connection"        => "Upgrade",
@@ -21,9 +34,9 @@ describe "Kemal::WebSocketHandler" do
   end
 
   it "matches on given route" do
-    handler = Kemal::WebSocketHandler::INSTANCE
-    ws "/" { |socket| socket.send("Match") }
-    ws "/no_match" { |socket| socket.send "No Match" }
+    app = Kemal::Base.new
+    app.ws "/" { |socket, context| socket.send("Match") }
+    app.ws "/no_match" { |socket, context| socket.send "No Match" }
     headers = HTTP::Headers{
       "Upgrade"               => "websocket",
       "Connection"            => "Upgrade",
@@ -32,13 +45,13 @@ describe "Kemal::WebSocketHandler" do
     }
     request = HTTP::Request.new("GET", "/", headers)
 
-    io_with_context = create_ws_request_and_return_io_and_context(handler, request)[0]
+    io_with_context = create_ws_request_and_return_io(app.websocket_handler, request)
     io_with_context.to_s.should eq("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n\x81\u0005Match")
   end
 
   it "fetches named url parameters" do
-    handler = Kemal::WebSocketHandler::INSTANCE
-    ws "/:id" { |_, c| c.ws_route_lookup.params["id"] }
+    app = Kemal::Base.new
+    app.ws "/:id" { |s, c| c.params.url["id"] }
     headers = HTTP::Headers{
       "Upgrade"               => "websocket",
       "Connection"            => "Upgrade",
@@ -46,15 +59,16 @@ describe "Kemal::WebSocketHandler" do
       "Sec-WebSocket-Version" => "13",
     }
     request = HTTP::Request.new("GET", "/1234", headers)
-    io_with_context = create_ws_request_and_return_io_and_context(handler, request)[0]
+    io_with_context = create_ws_request_and_return_io(app.websocket_handler, request)
     io_with_context.to_s.should eq("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n")
   end
 
   it "matches correct verb" do
-    handler = Kemal::WebSocketHandler::INSTANCE
-    handler.next = Kemal::RouteHandler::INSTANCE
-    ws "/" { }
-    get "/" { "get" }
+    app = Kemal::Base.new
+    handler = app.websocket_handler
+    handler.next = app.route_handler
+    app.ws "/" { }
+    app.get "/" { "get" }
     request = HTTP::Request.new("GET", "/")
     io = IO::Memory.new
     response = HTTP::Server::Response.new(io)

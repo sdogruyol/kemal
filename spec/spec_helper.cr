@@ -1,16 +1,5 @@
 require "spec"
-require "../src/*"
-
-include Kemal
-
-class CustomLogHandler < Kemal::BaseLogHandler
-  def call(env)
-    call_next env
-  end
-
-  def write(message)
-  end
-end
+require "../src/kemal"
 
 class TestContextStorageType
   property id
@@ -26,63 +15,27 @@ class AnotherContextStorageType
   @name = "kemal-context"
 end
 
-add_context_storage_type(TestContextStorageType)
-add_context_storage_type(AnotherContextStorageType)
+Kemal::Macros.add_context_storage_type(TestContextStorageType)
+Kemal::Macros.add_context_storage_type(AnotherContextStorageType)
 
-def create_request_and_return_io_and_context(handler, request)
+def call_request_on_app(app, request)
   io = IO::Memory.new
   response = HTTP::Server::Response.new(io)
   context = HTTP::Server::Context.new(request, response)
-  handler.call(context)
-  response.close
-  io.rewind
-  {io, context}
-end
-
-def create_ws_request_and_return_io_and_context(handler, request)
-  io = IO::Memory.new
-  response = HTTP::Server::Response.new(io)
-  context = HTTP::Server::Context.new(request, response)
-  begin
-    handler.call context
-  rescue IO::Error
-    # Raises because the IO::Memory is empty
-  end
-  io.rewind
-  {io, context}
-end
-
-def call_request_on_app(request)
-  io = IO::Memory.new
-  response = HTTP::Server::Response.new(io)
-  context = HTTP::Server::Context.new(request, response)
-  main_handler = build_main_handler
+  main_handler = build_main_handler(app)
   main_handler.call context
   response.close
   io.rewind
   HTTP::Client::Response.from_io(io, decompress: false)
 end
 
-def build_main_handler
-  Kemal.config.setup
-  main_handler = Kemal.config.handlers.first
+def build_main_handler(app)
+  app.setup
+  main_handler = app.handlers.first
   current_handler = main_handler
-  Kemal.config.handlers.each do |handler|
+  app.handlers.each_with_index do |handler, index|
     current_handler.next = handler
     current_handler = handler
   end
   main_handler
-end
-
-Spec.before_each do
-  config = Kemal.config
-  config.env = "development"
-  config.logging = false
-end
-
-Spec.after_each do
-  Kemal.config.clear
-  Kemal::RouteHandler::INSTANCE.routes = Radix::Tree(Route).new
-  Kemal::RouteHandler::INSTANCE.cached_routes = Hash(String, Radix::Result(Route)).new
-  Kemal::WebSocketHandler::INSTANCE.routes = Radix::Tree(WebSocket).new
 end
