@@ -1,5 +1,3 @@
-require "kilt"
-
 CONTENT_FOR_BLOCKS = Hash(String, Tuple(String, Proc(String))).new
 
 # `content_for` is a set of helpers that allows you to capture
@@ -37,9 +35,9 @@ CONTENT_FOR_BLOCKS = Hash(String, Tuple(String, Proc(String))).new
 # setting the appropriate set of tags that should be added to the layout.
 macro content_for(key, file = __FILE__)
   %proc = ->() {
-    __kilt_io__ = IO::Memory.new
+    __kemal_io__ = IO::Memory.new
     {{ yield }}
-    __kilt_io__.to_s
+    __kemal_io__.to_s
   }
 
   CONTENT_FOR_BLOCKS[{{key}}] = Tuple.new {{file}}, %proc
@@ -67,8 +65,10 @@ macro render(filename, layout)
 end
 
 # Render view with the given filename.
-macro render(filename)
-  Kilt.render({{filename}})
+macro render(filename, *args)
+  String.build do |__kemal_io__|
+    ECR.embed({{filename}}, "__kemal_io__", {{*args}})
+  end
 end
 
 # Halt execution with the current context.
